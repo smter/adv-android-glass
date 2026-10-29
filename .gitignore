@@ -1,0 +1,18 @@
+# Gradle / Android build output
+.gradle/
+build/
+app/.gradle/
+app/build/
+app/local.properties
+local.properties
+*.iml
+.idea/
+.kotlin/
+
+# Local captures & temporary inspection output
+/artifacts/
+/app/artifacts/
+
+# OS / editor
+.DS_Store
+Thumbs.db
