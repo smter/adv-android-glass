@@ -11,18 +11,18 @@ import androidx.compose.runtime.setValue
 import kotlin.math.abs
 
 /**
- * Height of the reading panel expressed as a share of the screen height.
+ * Height of the reading panel as a share of the screen height.
  *
- * Two settle positions exist - 30% ("收起") and 70% ("展开"). Every gesture (drag, upward
- * overscroll at the top of the article, downward overscroll at the top of the article) writes a
+ * Two settle positions exist — 30% (collapsed) and 70% (expanded). Every gesture writes a
  * continuous value; release settles onto the nearest anchor by position and velocity.
  */
 @Stable
 class PanelHeightState(
     collapsedFraction: Float = COLLAPSED,
     expandedFraction: Float = EXPANDED,
+    initialFraction: Float = collapsedFraction,
 ) {
-    var fraction by mutableFloatStateOf(collapsedFraction)
+    var fraction by mutableFloatStateOf(initialFraction.coerceIn(collapsedFraction, expandedFraction))
         private set
 
     val collapsed: Float = collapsedFraction
@@ -30,10 +30,10 @@ class PanelHeightState(
 
     val isExpanded: Boolean get() = fraction > (collapsed + expanded) / 2f
 
-    /** 0 at the collapsed anchor, 1 at the expanded anchor. Drives the background parallax. */
+    /** 0 at the collapsed anchor, 1 at the expanded anchor. */
     val progress: Float get() = ((fraction - collapsed) / (expanded - collapsed)).coerceIn(0f, 1f)
 
-    /** Positive delta grows the panel. Clamped to the anchor range, so overscroll never escapes. */
+    /** Positive delta grows the panel. Clamped to the anchors, so a drag never escapes them. */
     fun dragBy(delta: Float) {
         fraction = (fraction + delta).coerceIn(collapsed, expanded)
     }

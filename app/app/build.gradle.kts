@@ -66,5 +66,7 @@ dependencies {
 
   debugImplementation(libs.androidx.compose.ui.tooling)
 
+  implementation(libs.liquid.glass.backdrop)
+
   testImplementation(libs.junit)
 }

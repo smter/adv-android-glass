@@ -14,18 +14,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -33,7 +29,6 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.smter.adv.content.ReadingSample
-import kotlinx.coroutines.launch
 
 /** Typography for the immersive body: system serif family → NotoSerifCJK for Chinese. */
 val ReadingBodyStyle = TextStyle(
@@ -44,14 +39,17 @@ val ReadingBodyStyle = TextStyle(
     color = Color(0xF2FFFFFF),
 )
 
-/** Vertical share of the panel per pixel of overscroll: one full swipe ≈ one anchor step. */
-private const val OVERSCROLL_PER_PANEL_FRACTION = 0.0009f
+/** Vertical share of the panel per pixel of overscroll: one firm swipe ≈ one anchor step. */
+private const val OVERSCROLL_PER_PANEL_FRACTION = 0.0016f
 
 /**
- * The scrollable article. Scroll gestures are consumed by the text first; whatever remains when the
- * text cannot scroll further is handed to [heightState]:
- *  - pulling up at the top of the article expands the panel (up to 70%),
- *  - pulling down at the top of the article collapses it (back to 30%).
+ * The scrollable article on top of the glass.
+ *
+ * Gestures: the article scrolls first. While the list sits at its very top:
+ *  - dragging up (finger moves up, content would scroll down) grows the panel,
+ *  - dragging down shrinks it.
+ *
+ * Only a tap toggles the anchors; drags are left to the list, so text can always scroll.
  */
 @Composable
 fun ReadingPanel(
@@ -60,41 +58,22 @@ fun ReadingPanel(
     onTapPanel: () -> Unit,
 ) {
     val scroll = rememberScrollState()
-    val scope = rememberCoroutineScope()
-    var dragStartedAtTop by remember { mutableStateOf(false) }
 
-    val connection = remember(heightState) {
+    val connection = remember(heightState, scroll) {
         object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                // Pre-scroll runs before the list sees the delta.
-                if (source == NestedScrollSource.UserInput) {
-                    dragStartedAtTop = scroll.value <= 0
-                }
-                return Offset.Zero
-            }
-
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                if (available.y == 0f) return Offset.Zero
-                val overscroll = available.y // negative = finger moved up (reveal more)
-                // Upward overscroll at the top expands; downward overscroll from an expanded panel collapses.
-                if (overscroll < 0f && scroll.value <= 0) {
-                    heightState.dragBy(-overscroll * OVERSCROLL_PER_PANEL_FRACTION)
-                    return Offset(0f, overscroll)
-                }
-                if (overscroll > 0f && scroll.value <= 0 && heightState.isExpanded) {
-                    heightState.dragBy(-overscroll * OVERSCROLL_PER_PANEL_FRACTION)
-                    return Offset(0f, overscroll)
-                }
-                return Offset.Zero
-            }
-
-            override suspend fun onPreFling(available: Velocity): Velocity {
-                return Offset.Zero.let { _ -> Velocity.Zero }
+                if (source != NestedScrollSource.UserInput || available.y == 0f) return Offset.Zero
+                // Overscroll only counts while the list is pinned at its top edge.
+                val atTop = scroll.value <= 0
+                if (!atTop) return Offset.Zero
+                val overscroll = available.y // negative while the finger moves up
+                heightState.dragBy(-overscroll * OVERSCROLL_PER_PANEL_FRACTION)
+                return Offset(0f, overscroll)
             }
 
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
                 if (heightState.fraction != heightState.collapsed && heightState.fraction != heightState.expanded) {
-                    heightState.settle(velocity = available.y / 16f)
+                    heightState.settle(velocity = available.y / 40f)
                 }
                 return Velocity.Zero
             }
@@ -135,16 +114,18 @@ fun ReadingPanel(
             }
             Spacer(Modifier.height(24.dp))
         }
-        // Tap on the panel body toggles the anchor; text tapping does not scroll-steal because it
-        // only reacts to taps, not drags.
+        // Tap toggle. This sits over the text but only reacts to a press-and-release *without*
+        // movement: a drag is left to the scroller, which is why it lives in the pane not on top.
         Box(
-            Modifier.fillMaxSize().pointerInput(heightState) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    val up = waitForUpOrCancellation()
-                    if (up != null) onTapPanel()
-                }
-            },
+            Modifier
+                .fillMaxSize()
+                .pointerInput(onTapPanel) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        val up = waitForUpOrCancellation()
+                        if (up != null && !up.isConsumed) onTapPanel()
+                    }
+                },
         )
     }
 }
