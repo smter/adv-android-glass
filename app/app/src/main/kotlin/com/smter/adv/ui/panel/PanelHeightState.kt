@@ -42,6 +42,15 @@ class PanelHeightState(
         fraction = target.coerceIn(collapsed, expanded)
     }
 
+    /**
+     * Whether the sheet takes a vertical drag delta instead of leaving it to the article.
+     *
+     * A drag up grows the sheet until it is fully expanded, and a drag down at the article's very
+     * top shrinks it again; everything else belongs to the scroller, so reading is never hijacked.
+     */
+    fun takesOverscroll(dragUp: Boolean, listAtTop: Boolean): Boolean =
+        if (dragUp) fraction < expanded else isExpanded && listAtTop
+
     /** Animated settle onto an anchor. */
     suspend fun settle(target: Float = nearestAnchor(), velocity: Float = 0f) {
         animate(

@@ -30,6 +30,12 @@ data class GlassLook(
     /** Rim inner shadow, in dp. */
     val innerShadowRadiusDp: Float = 24f,
     val innerShadowAlpha: Float = 0.55f,
+    /**
+     * ARGB backing colour of the opaque tier's pane. It must be near-solid: when neither refraction
+     * nor blur is available, this colour is the only thing keeping the wallpaper from fighting the
+     * body text.
+     */
+    val fallbackBaseColor: Long = 0xFF232B3A,
 )
 
 /** What the rim does optically. Dispersion maps to the library's chromatic aberration toggle. */
@@ -102,12 +108,24 @@ object GlassLookMath {
 
     private fun clampStrength(strength: Float) = strength.coerceIn(MIN_STRENGTH, MAX_STRENGTH)
 
+    /**
+     * Milky tint alpha for [engine]. A fallback tier loses its lens (and, below API 31, its blur),
+     * so it needs a denser veil than full refraction to keep the body text readable.
+     */
+    fun tintAlpha(look: GlassLook, engine: GlassEngine): Float = when (engine) {
+        GlassEngine.FULL -> look.tintAlpha
+        GlassEngine.BLUR, GlassEngine.OPAQUE -> maxOf(look.tintAlpha, FALLBACK_TINT_ALPHA)
+    }.coerceIn(0f, 1f)
+
     /** Below this the demo knob stops shrinking the effect into a flat pane. */
     const val MIN_STRENGTH = 0.40f
     const val MAX_STRENGTH = 2.5f
     const val STRENGTH_STEP = 0.25f
     const val MIN_HEIGHT_PX = 8f
     const val MIN_AMOUNT_PX = 6f
+
+    /** Floor for the fallback tiers' tint, so they read as a pane rather than a bare window. */
+    const val FALLBACK_TINT_ALPHA = 0.30f
 }
 
 /** Exact pixel geometry of a panel, mirroring [GlassLookMath.pixels] where Compose needs dp again. */

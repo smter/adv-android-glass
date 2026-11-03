@@ -1,13 +1,13 @@
 package com.smter.adv.ui.panel
 
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -21,7 +21,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -45,11 +44,9 @@ private const val OVERSCROLL_PER_PANEL_FRACTION = 0.0016f
 /**
  * The scrollable article on top of the glass.
  *
- * Gestures: the article scrolls first. While the list sits at its very top:
- *  - dragging up (finger moves up, content would scroll down) grows the panel,
- *  - dragging down shrinks it.
- *
- * Only a tap toggles the anchors; drags are left to the list, so text can always scroll.
+ * Gestures: an upward drag grows the panel until it is fully expanded; after that the article
+ * scrolls normally. Pulling down at the very top of the article shrinks the panel again. A tap
+ * toggles the anchors.
  */
 @Composable
 fun ReadingPanel(
@@ -61,14 +58,15 @@ fun ReadingPanel(
 
     val connection = remember(heightState, scroll) {
         object : NestedScrollConnection {
-            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 if (source != NestedScrollSource.UserInput || available.y == 0f) return Offset.Zero
-                // Overscroll only counts while the list is pinned at its top edge.
-                val atTop = scroll.value <= 0
-                if (!atTop) return Offset.Zero
-                val overscroll = available.y // negative while the finger moves up
-                heightState.dragBy(-overscroll * OVERSCROLL_PER_PANEL_FRACTION)
-                return Offset(0f, overscroll)
+                // available.y is a scroll delta: negative while the finger moves up (the content
+                // would scroll forward), positive while it moves down.
+                if (!heightState.takesOverscroll(dragUp = available.y < 0f, listAtTop = scroll.value <= 0)) {
+                    return Offset.Zero
+                }
+                heightState.dragBy(-available.y * OVERSCROLL_PER_PANEL_FRACTION)
+                return available
             }
 
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
@@ -80,10 +78,23 @@ fun ReadingPanel(
         }
     }
 
-    Box(modifier.fillMaxSize().nestedScroll(connection)) {
+    Box(
+        modifier
+            .fillMaxSize()
+            .nestedScroll(connection)
+            // Tap-to-toggle lives on the container rather than on an overlay above it: an overlay
+            // would shadow the scrollable underneath, so the article could never scroll.
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onTapPanel,
+            ),
+    ) {
         Column(
             Modifier
-                .fillMaxSize()
+                // fillMaxSize() would pin the column to the viewport height and leave the scroll
+                // range at zero; the column must wrap its content so the article can scroll.
+                .fillMaxWidth()
                 .verticalScroll(scroll)
                 .padding(horizontal = 28.dp)
                 .padding(top = 38.dp, bottom = 44.dp),
@@ -114,18 +125,5 @@ fun ReadingPanel(
             }
             Spacer(Modifier.height(24.dp))
         }
-        // Tap toggle. This sits over the text but only reacts to a press-and-release *without*
-        // movement: a drag is left to the scroller, which is why it lives in the pane not on top.
-        Box(
-            Modifier
-                .fillMaxSize()
-                .pointerInput(onTapPanel) {
-                    awaitEachGesture {
-                        awaitFirstDown(requireUnconsumed = false)
-                        val up = waitForUpOrCancellation()
-                        if (up != null && !up.isConsumed) onTapPanel()
-                    }
-                },
-        )
     }
 }

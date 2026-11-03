@@ -139,6 +139,8 @@ fun DemoScreen(launch: LaunchState = LaunchState.None) {
             heightState = heightState,
             look = look,
             modifier = Modifier.align(Alignment.BottomCenter),
+            // Debug launch extra only; normally null and the glass module reads the platform itself.
+            engine = launch.engine,
         ) {
             ReadingPanel(
                 heightState = heightState,

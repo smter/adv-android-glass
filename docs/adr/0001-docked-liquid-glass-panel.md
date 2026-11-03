@@ -136,8 +136,12 @@ The API gate lives **inside the glass panel module**, not at call sites:
 - **API 26–30** — no render effects either; the panel degrades to an **opaque tinted
   surface** with a highlight and an inner shadow.
 
-The "engine" launch extra selects between the full-refraction path and the forced fallback
-path, so the fallback can be exercised on a capable device.
+The gate is `GlassEngine.resolve(Build.VERSION.SDK_INT, forced)`: call sites pass no tier at
+all, so no view outside the glass module knows which effects the device can run.
+
+The `engine` launch extra forces a tier — `full`, `blur` or `opaque` (`fallback` is an
+alias for `blur`) — so either fallback can be exercised on a capable device. Forcing a tier
+is the only reason the resolver takes an override.
 
 ### Testing seam: `GlassLookMath` as a pure JVM module
 
